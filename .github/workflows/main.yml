@@ -1,0 +1,56 @@
+name: Update Visit Data
+
+on:
+  repository_dispatch:
+    types: [log_visit]
+
+jobs:
+  update_visits:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Read current visit count
+        id: read_visits
+        run: |
+          if [ -f visits.json ]; then
+            echo "CURRENT_COUNT=$(jq -r '.count' visits.json)" >> $GITHUB_ENV
+          else
+            echo "CURRENT_COUNT=0" >> $GITHUB_ENV
+          fi
+
+      - name: Increment visit count
+        run: |
+          NEW_COUNT=$((CURRENT_COUNT + 1))
+          echo "NEW_COUNT=$NEW_COUNT" >> $GITHUB_ENV
+
+      - name: Update visits.json
+        run: |
+          echo "{\"count\": $NEW_COUNT}" > visits.json
+
+      - name: Read existing visitor data
+        id: read_visitors
+        run: |
+          if [ -f visitors.json ]; then
+            echo "EXISTING_DATA=$(cat visitors.json)" >> $GITHUB_ENV
+          else
+            echo "EXISTING_DATA=[]" >> $GITHUB_ENV
+          fi
+
+      - name: Add new visitor data
+        run: |
+          NEW_DATA=$(echo '${{ github.event.client_payload }}' | jq -c '.')
+          UPDATED_DATA=$(echo '$EXISTING_DATA' | jq --argjson new "$NEW_DATA" '. += [$new]')
+          echo "$UPDATED_DATA" > visitors.json
+
+      - name: Commit and push changes
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add visits.json visitors.json
+          git commit -m "Zaktualizowano licznik odwiedzin i dane odwiedzających"
+          git push
